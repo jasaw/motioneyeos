@@ -1,0 +1,27 @@
+#!/bin/sh
+
+while true
+do
+	TT=`vcgencmd get_throttled`
+	MM=`vcgencmd get_mem malloc`
+	MR=`vcgencmd get_mem reloc`
+	echo $TT, $MM, $MR
+	sleep 1
+done
+
+# vcgencmd get_mem <type>
+# Where type is:
+# arm: total memory assigned to arm
+# gpu: total memory assigned to gpu
+# malloc_total: total memory assigned to gpu malloc heap
+# malloc: free gpu memory in malloc heap
+# reloc_total: total memory assigned to gpu relocatable heap
+# reloc: free gpu memory in relocatable heap
+
+# vcgencmd get_throttled
+# 0: under-voltage
+# 1: arm frequency capped
+# 2: currently throttled
+# 16: under-voltage has occurred
+# 17: arm frequency capped has occurred
+# 18: throttling has occurred
