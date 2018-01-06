@@ -1,0 +1,4 @@
+config BR2_PACKAGE_LDR_READER
+	bool "ldr-reader"
+	help
+	  Reads analog Light Dependent Resistor using sysfs gpio interface.
