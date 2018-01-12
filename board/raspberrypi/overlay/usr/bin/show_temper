@@ -1,0 +1,5 @@
+#!/bin/sh
+
+TEMP=`vcgencmd measure_temp | cut -f2 -d'='`
+echo $TEMP
+
