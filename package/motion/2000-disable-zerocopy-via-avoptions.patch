@@ -1,4 +1,4 @@
-commit 8ec2abeeecc6645e5dc278e11911823416181bd0
+commit 50e090ef83a48bfb306ce29c6bf81e111a1ca33c
 Author: Joo Aun Saw <jasaw@dius.com.au>
 Date:   Thu Aug 29 01:29:39 2019 +1000
 
@@ -8,14 +8,14 @@ Date:   Thu Aug 29 01:29:39 2019 +1000
     we can disable zerocopy from ffmpeg options.
 
 diff --git a/ffmpeg.c b/ffmpeg.c
-index 3f731ca..01423e4 100644
+index 3f731ca..07eadcc 100644
 --- a/ffmpeg.c
 +++ b/ffmpeg.c
 @@ -589,6 +589,7 @@ static int ffmpeg_codec_is_blacklisted(const char *codec_name){
  
      static const char *blacklisted_codec[] =
      {
-+#if ((LIBAVCODEC_VERSION_MAJOR < 58) || (LIBAVCODEC_VERSION_MINOR < 55))
++#if (!((LIBAVCODEC_VERSION_MAJOR >= 58) && (LIBAVCODEC_VERSION_MINOR >= 55)))
          /* h264_omx & ffmpeg combination locks up on Raspberry Pi.
           * To use h264_omx encoder and workaround the lock up issue:
           * - disable input_zerocopy in ffmpeg omx.c:omx_encode_init function.
