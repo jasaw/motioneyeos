@@ -14,6 +14,12 @@ MOTION_CONF_OPTS = --without-pgsql \
                    --with-ffmpeg=$(STAGING_DIR)/usr/lib \
                    --with-ffmpeg-headers=$(STAGING_DIR)/usr/include
 
+# Autoreconf requires an m4 directory to exist
+define MOTION_PATCH_M4
+    mkdir -p $(@D)/m4
+endef
+MOTION_POST_PATCH_HOOKS += MOTION_PATCH_M4
+
 define MOTION_INSTALL_TARGET_CMDS
     cp $(@D)/motion $(TARGET_DIR)/usr/bin/motion
 endef
