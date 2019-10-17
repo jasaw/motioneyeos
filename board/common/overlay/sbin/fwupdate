@@ -4,14 +4,14 @@
 #### usage ####
 
 function exit_usage() {
-    echo "Usage: fwupdate versions [-j]             (lists available versions, optionally outputting json)"
-    echo "       fwupdate current                   (shows the current version"
-    echo "       fwupdate download <version|url>    (downloads a firmware version)"
-    echo "       fwupdate extract                   (extracts the downloaded firmware archive)"
-    echo "       fwupdate flashboot                 (flashes the boot partition from extracted image)"
-    echo "       fwupdate flashreboot               (prepares for reboot + root partititon flash)"
-    echo "       fwupdate status                    (shows the current firmware updating status; see below)"
-    echo "       fwupdate upgrade <version|url>     (performs all the operations necessary for upgrading)"
+    echo "Usage: fwupdate versions [-j]                 (lists available versions, optionally outputting json)"
+    echo "       fwupdate current                       (shows the current version"
+    echo "       fwupdate download <version|url>        (downloads a firmware version)"
+    echo "       fwupdate extract                       (extracts the downloaded firmware archive)"
+    echo "       fwupdate flashboot                     (flashes the boot partition from extracted image)"
+    echo "       fwupdate flashreboot                   (prepares for reboot + root partititon flash)"
+    echo "       fwupdate status                        (shows the current firmware updating status; see below)"
+    echo "       fwupdate upgrade <version|url|file>    (performs all the operations necessary for upgrading)"
     echo ""
     echo "Statuses:"
     echo "       idle"
@@ -81,7 +81,7 @@ function show_versions() {
     source $OS_CONF
     board=$(cat $SYS_BOARD_FILE)
     show_json=$1
-  
+
     # the /usr/libexec/list-versions-* helpers return a table with the following format:
     #     <version>|<prerelease>|<board>|<url>|<date>
     versions=$(FW_USERNAME=$os_firmware_username FW_PASSWORD=$os_firmware_password \
@@ -113,7 +113,7 @@ function show_versions() {
 
 function show_current() {
     source $SYS_VERSION_FILE
-    
+
     echo $os_version
 }
 
@@ -123,9 +123,26 @@ function show_current() {
 function do_download() {
     echo "downloading..."
 
-    rm -f $FW_DIR/$FW_FILE_GZ $FW_DIR/$FW_FILE_XZ
-    rm -f $FW_DIR/$FW_FILE_EXTR
-    rm -f $FW_DIR/$BOOT_READY_FILE
+    rm -rf ${FW_DIR}/*
+    mkdir -p ${FW_DIR}
+
+    # Look for local file first
+    if [[ -f "$1" ]]; then
+        version="custom"
+        FNAME=`basename $1`
+        FILEEXT=${FNAME##*.}
+        DST_FNAME=""
+        if [[ "${FILEEXT}" == "xz" ]]; then
+            DST_FNAME=${FW_DIR}/${FW_FILE_XZ}
+        elif [[ "${FILEEXT}" == "gz" ]]; then
+            DST_FNAME=${FW_DIR}/${FW_FILE_GZ}
+        fi
+        if [[ -n "${DST_FNAME}" ]]; then
+            cp -f $1 ${DST_FNAME}
+            echo ${version} > ${FW_DIR}/${VER_FILE}
+            return
+        fi
+    fi
 
     source $OS_CONF
     board=$(cat $SYS_BOARD_FILE)
@@ -168,7 +185,7 @@ function do_download() {
     pid=$!
     echo $pid > $FW_DIR/$CURL_PID_FILE
     wait $pid
-    
+
     if [ "$?" != 0 ]; then
         cat $FW_DIR/$CURL_LOG_FILE
         exit 1
@@ -194,7 +211,7 @@ function download_status() {
 
 function do_extract() {
     echo "extracting..."
-    
+
     rm -f $FW_DIR/$FW_FILE_EXTR
     rm -f $FW_DIR/$BOOT_READY_FILE
 
@@ -223,7 +240,7 @@ function do_extract() {
         echo "firmware compression format $format not supported" 1>&2
         exit 1
     fi
-    
+
     pid=$!
     echo $pid > $DECOMPRESS_PID_FILE
     wait $pid
@@ -232,9 +249,9 @@ function do_extract() {
         cat $DECOMPRESS_LOG_FILE
         exit 1
     fi
-    
+
     # verify available partition space
-    
+
     fw_boot_info=$(fdisk --bytes -l -o device,start,end,size $FW_DIR/$FW_FILE_EXTR | grep "${FW_FILE_EXTR}1")
     fw_boot_info=($fw_boot_info)
     fw_boot_size=${fw_boot_info[3]}
@@ -242,15 +259,15 @@ function do_extract() {
     fw_root_info=$(fdisk --bytes -l -o device,start,end,size $FW_DIR/$FW_FILE_EXTR | grep "${FW_FILE_EXTR}2")
     fw_root_info=($fw_root_info)
     fw_root_size=${fw_root_info[3]}
-    
+
     disk_boot_info=$(fdisk --bytes -l -o device,start,end,size $DISK_DEV | grep $BOOT_DEV)
     disk_boot_info=($disk_boot_info)
     disk_boot_size=${disk_boot_info[3]}
-    
+
     disk_root_info=$(fdisk --bytes -l -o device,start,end,size $DISK_DEV | grep $ROOT_DEV)
     disk_root_info=($disk_root_info)
     disk_root_size=${disk_root_info[3]}
-    
+
     if [[ $disk_boot_size -lt $fw_boot_size ]]; then
         echo "not enough space on boot partition ($fw_boot_size needed, $disk_boot_size available)" 1>&2
         exit 1
@@ -289,7 +306,7 @@ function extract_status() {
 
 function flash_boot() {
     echo "flashing boot..."
-    
+
     rm -f $FW_DIR/$BOOT_READY_FILE
 
     set +e
@@ -302,7 +319,7 @@ function flash_boot() {
     mount -o remount,rw /
     mv /sbin/reboot /sbin/reboot.bak
     ln -s /bin/true /sbin/reboot
-    
+
     boot_info=$(fdisk --bytes -l -o device,start,end,size $FW_DIR/$FW_FILE_EXTR | grep "${FW_FILE_EXTR}1")
     boot_info=($boot_info)
     boot_start=$((${boot_info[1]} / 2048))  # in MB
@@ -312,7 +329,7 @@ function flash_boot() {
     root_info=($root_info)
     root_start=$((${root_info[1]} / 2048))  # in MB
     root_size=$((${root_info[3]} / 1048576))  # in MB
-    
+
     echo $root_start $root_size > $FW_DIR/$ROOT_INFO_FILE
 
     dd if=$FW_DIR/$FW_FILE_EXTR skip=$boot_start of=$BOOT_DEV bs=1048576 count=$boot_size &>$FW_DIR/$DD_LOG_FILE &
@@ -321,7 +338,7 @@ function flash_boot() {
     wait $pid
 
     mount -T /etc/fstab.disk -o rw /boot
-    
+
     # the /usr/libexec/fw-restore-boot-cfg script, if present, takes the old (backup) boot dir as argument
     # and should restore any /boot configuration that needs to be preserved across updates
     # from the old boot dir to the current (new) /boot dir
@@ -350,7 +367,7 @@ function flash_cleanup() {
         rm -f /sbin/reboot
         mv /sbin/reboot.bak /sbin/reboot
     fi
-    
+
     mount /boot 2>/dev/null
 }
 
@@ -361,7 +378,7 @@ function flash_reboot() {
     echo "preparing for reboot..."
 
     board=$(cat $SYS_BOARD_FILE)
-    
+
     # the /usr/libexec/fw-prepare-boot script should be present and should
     # make the necessary changes to the current boot configuration so that
     # the firmware update initramfs will be used by the next boot
@@ -374,7 +391,7 @@ function flash_reboot() {
     busybox reboot &
     sleep 10
     echo b > /proc/sysrq-trigger
-    
+
     exit 0
 }
 
@@ -399,7 +416,7 @@ function show_status() {
         echo "extracted $(new_version)"
         return
     fi
-    
+
     status=$(download_status)
     if [ "$status" == "running" ]; then
         echo "downloading $(new_version)"
@@ -417,7 +434,7 @@ function show_status() {
 
 function do_upgrade() {
     echo "upgrading to $1"
-    
+
     set -e
 
     do_download "$1"
@@ -425,10 +442,10 @@ function do_upgrade() {
 
     do_extract
     show_status
-    
+
     flash_boot
     show_status
-    
+
     flash_reboot
 }
 
@@ -488,4 +505,3 @@ case "$1" in
         exit_usage
         ;;
 esac
-

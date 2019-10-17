@@ -80,19 +80,19 @@ def _get_date_settings():
                 except:
                     continue
 
-                if name == 'date_method':
+                if name == 'DATE_METHOD':
                     date_method = value
 
-                elif name == 'date_host':
+                elif name == 'DATE_HOST':
                     date_host = value
                     
-                elif name == 'date_ntp_server':
+                elif name == 'DATE_NTP_SERVER':
                     date_ntp_server = value
 
-                elif name == 'date_timeout':
+                elif name == 'DATE_TIMEOUT':
                     date_timeout = int(value)
 
-                elif name == 'date_interval':
+                elif name == 'DATE_INTERVAL':
                     date_interval = int(value)
 
     s = {
@@ -119,11 +119,11 @@ def _set_date_settings(s):
             'method=%(dateMethod)s, host=%(dateHost)s, ntp_server=%(dateNtpServer)s, timeout=%(dateTimeout)s, interval=%(dateInterval)s' % s)
 
     with open(DATE_CONF, 'w') as f:
-        f.write('date_method=%s\n' % s['dateMethod'])
-        f.write('date_host=%s\n' % s['dateHost'])
-        f.write('date_ntp_server=%s\n' % s['dateNtpServer'])
-        f.write('date_timeout=%s\n' % s['dateTimeout'])
-        f.write('date_interval=%s\n' % s['dateInterval'])
+        f.write('DATE_METHOD=%s\n' % s['dateMethod'])
+        f.write('DATE_HOST=%s\n' % s['dateHost'])
+        f.write('DATE_NTP_SERVER=%s\n' % s['dateNtpServer'])
+        f.write('DATE_TIMEOUT=%s\n' % s['dateTimeout'])
+        f.write('DATE_INTERVAL=%s\n' % s['dateInterval'])
 
 
 def _get_os_settings():
@@ -148,7 +148,7 @@ def _get_os_settings():
                 except:
                     continue
 
-                if name == 'os_prereleases':
+                if name == 'OS_PRERELEASES':
                     prereleases = value == 'true'
 
     s = {
@@ -184,11 +184,11 @@ def _set_os_settings(s):
             except:
                 continue
             
-            if name == 'os_prereleases':
-                lines[i] = 'os_prereleases="%s"' % str(s.pop('prereleases')).lower()
+            if name == 'OS_PRERELEASES':
+                lines[i] = 'OS_PRERELEASES="%s"' % str(s.pop('prereleases')).lower()
     
     if 'prereleases' in s:
-        lines.append('os_prereleases="%s"' % str(s.pop('prereleases')).lower())
+        lines.append('OS_PRERELEASES="%s"' % str(s.pop('prereleases')).lower())
 
     with open(OS_CONF, 'w') as f:
         for line in lines:
@@ -311,11 +311,18 @@ def _set_motioneye_settings(s):
             f.write(line)
 
     # also update debug in os.conf
+    cmd = 'grep -E "^OS_DEBUG" %s &>/dev/null' % OS_CONF
+    try:
+        subprocess.check_call(cmd, shell=True)
+       
+    except subprocess.CalledProcessError:  # OS_DEBUG not present
+        os.system('echo OS_DEBUG=\\"false\\" >> %s' % OS_CONF)
+    
     if debug:
-        cmd = "sed -i -r 's/os_debug=\"?false\"?/os_debug=\"true\"/'  %s" % OS_CONF
+        cmd = "sed -i -r 's/OS_DEBUG=\"?false\"?/OS_DEBUG=\"true\"/'  %s" % OS_CONF
         
     else:
-        cmd = "sed -i -r 's/os_debug=\"?true\"?/os_debug=\"false\"/'  %s" % OS_CONF
+        cmd = "sed -i -r 's/OS_DEBUG=\"?true\"?/OS_DEBUG=\"false\"/'  %s" % OS_CONF
 
     if os.system(cmd):
         logging.error('failed to set debug flag in os.conf')
@@ -348,7 +355,6 @@ def hostname():
         'description': 'sets a custom hostname for the device (leave blank for default)',
         'type': 'str',
         'section': 'general',
-        'advanced': True,
         'reboot': True,
         'required': False,
         'validate': '^[a-z0-9\-_.]{0,64}$',
@@ -361,8 +367,7 @@ def hostname():
 def extraDateSeparator():
     return {
         'type': 'separator',
-        'section': 'expertSettings',
-        'advanced': True
+        'section': 'expertSettings'
     }
 
 
@@ -374,7 +379,6 @@ def dateMethod():
         'type': 'choices',
         'choices': [('http', 'HTTP'), ('ntp', 'NTP')],
         'section': 'expertSettings',
-        'advanced': True,
         'reboot': True,
         'required': True,
         'get': _get_date_settings,
@@ -390,7 +394,6 @@ def dateHost():
         'description': 'sets the hostname or IP address to which the HTTP request will be made',
         'type': 'str',
         'section': 'expertSettings',
-        'advanced': True,
         'reboot': True,
         'required': True,
         'depends': ['dateMethod==http'],
@@ -407,7 +410,6 @@ def dateNtpServer():
         'description': 'sets a custom NTP server (leave blank to use the default server)',
         'type': 'str',
         'section': 'expertSettings',
-        'advanced': True,
         'reboot': True,
         'required': False,
         'depends': ['dateMethod==ntp'],
@@ -427,7 +429,6 @@ def dateTimeout():
         'max': 3600,
         'unit': 'seconds',
         'section': 'expertSettings',
-        'advanced': True,
         'reboot': True,
         'required': True,
         'get': _get_date_settings,
@@ -446,7 +447,6 @@ def dateInterval():
         'max': 86400,
         'unit': 'seconds',
         'section': 'expertSettings',
-        'advanced': True,
         'reboot': True,
         'required': True,
         'depends': ['dateMethod==http'],
@@ -460,8 +460,7 @@ def dateInterval():
 def extraMotionEyeSeparator():
     return {
         'type': 'separator',
-        'section': 'expertSettings',
-        'advanced': True
+        'section': 'expertSettings'
     }
 
 
@@ -474,7 +473,6 @@ def port():
         'min': 1,
         'max': 65535,
         'section': 'expertSettings',
-        'advanced': True,
         'reboot': True,
         'required': True,
         'get': _get_motioneye_settings,
@@ -490,7 +488,6 @@ def motionBinary():
         'description': 'sets the path to the motion binary',
         'type': 'str',
         'section': 'expertSettings',
-        'advanced': True,
         'reboot': True,
         'required': True,
         'get': _get_motioneye_settings,
@@ -506,7 +503,6 @@ def motionKeepAlive():
         'description': 'enables continuous motion daemon hang detection (at the expense of a slightly higher CPU usage)',
         'type': 'bool',
         'section': 'expertSettings',
-        'advanced': True,
         'reboot': True,
         'unit': 'seconds',
         'get': _get_motioneye_settings,
@@ -522,7 +518,6 @@ def debug():
         'description': 'turning debugging on will generate verbose log messages and will mount all the partitions in read-write mode',
         'type': 'bool',
         'section': 'expertSettings',
-        'advanced': True,
         'reboot': True,
         'get': _get_motioneye_settings,
         'set': _set_motioneye_settings,
@@ -537,7 +532,6 @@ def prereleases():
         'description': 'turning this option on will allow updating to prereleases (untested, possibly unstable versions)',
         'type': 'bool',
         'section': 'expertSettings',
-        'advanced': True,
         'get': _get_os_settings,
         'set': _set_os_settings,
         'get_set_dict': True
@@ -548,8 +542,7 @@ def prereleases():
 def extraLogsSeparator():
     return {
         'type': 'separator',
-        'section': 'expertSettings',
-        'advanced': True
+        'section': 'expertSettings'
     }
 
 
@@ -560,7 +553,6 @@ def motionLog():
         'description': 'download the log files and include them with any issue you want to report',
         'type': 'html',
         'section': 'expertSettings',
-        'advanced': True,
         'get': _get_motion_log,
     }
 
@@ -570,7 +562,6 @@ def motionEyeLog():
     return {
         'type': 'html',
         'section': 'expertSettings',
-        'advanced': True,
         'get': _get_motion_eye_log,
     }
 
@@ -580,7 +571,6 @@ def messagesLog():
     return {
         'type': 'html',
         'section': 'expertSettings',
-        'advanced': True,
         'get': _get_messages_log,
     }
 
@@ -590,7 +580,6 @@ def bootLog():
     return {
         'type': 'html',
         'section': 'expertSettings',
-        'advanced': True,
         'get': _get_boot_log,
     }
 
@@ -600,7 +589,6 @@ def dmesgLog():
     return {
         'type': 'html',
         'section': 'expertSettings',
-        'advanced': True,
         'get': _get_dmesg_log,
     }
 
