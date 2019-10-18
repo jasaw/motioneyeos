@@ -11,7 +11,7 @@ function exit_usage() {
     echo "       fwupdate flashboot                 (flashes the boot partition from extracted image)"
     echo "       fwupdate flashreboot               (prepares for reboot + root partititon flash)"
     echo "       fwupdate status                    (shows the current firmware updating status; see below)"
-    echo "       fwupdate upgrade <version|url>     (performs all the operations necessary for upgrading)"
+    echo "       fwupdate upgrade <version|url|file> (performs all the operations necessary for upgrading)"
     echo ""
     echo "Statuses:"
     echo "       idle"
@@ -37,7 +37,6 @@ SYS_VERSION_FILE=/etc/version
 SYS_BOARD_FILE=/etc/board
 OS_CONF=/data/etc/os.conf
 
-BOOT_DEV=$(mount | grep /boot | cut -d ' ' -f 1)
 MIN_FREE_DISK=$((500*1024))  # 500 MB
 VER_FILE=version
 ROOT_INFO_FILE=root_info
@@ -59,6 +58,21 @@ XZCAT_PID_FILE=xzcat.pid
 
 DD_LOG_FILE=dd.log
 DD_PID_FILE=dd.pid
+
+
+#### disk & partition devices ####
+
+BOOT_DEV=$(mount | grep /boot | cut -d ' ' -f 1)
+ROOT_DEV=${BOOT_DEV:0:-1}2
+DISK_DEV=$(mount | grep /boot | cut -d ' ' -f 1)
+if [[ "$ROOT_DEV" =~ ^([/a-z0-9]+)(p[0-9])$ ]]; then  # e.g. /dev/mmcblk0p2
+    DISK_DEV=${BASH_REMATCH[1]}
+elif [[ "$ROOT_DEV" =~ ^([/a-z0-9]+)([0-9])$ ]]; then  # e.g. /dev/sdc2
+    DISK_DEV=${BASH_REMATCH[1]}
+else
+    echo "cannot identify disk device from $ROOT_DEV" 1>&2
+    exit 1
+fi
 
 
 #### versions ####
@@ -105,9 +119,28 @@ function show_current() {
 function do_download() {
     echo "downloading..."
 
-    rm -f $FW_DIR/$FW_FILE_GZ $FW_DIR/$FW_FILE_XZ
+    rm -rf ${FW_DIR}/*
     rm -f $FW_DIR/$FW_FILE_EXTR
+    mkdir -p ${FW_DIR}
     rm -f $FW_DIR/$BOOT_READY_FILE
+
+    # Look for local file first
+    if [[ -f "$1" ]]; then
+        version="custom"
+        FNAME=`basename $1`
+        FILEEXT=${FNAME##*.}
+        DST_FNAME=""
+        if [[ "${FILEEXT}" == "xz" ]]; then
+            DST_FNAME=${FW_DIR}/${FW_FILE_XZ}
+        elif [[ "${FILEEXT}" == "gz" ]]; then
+            DST_FNAME=${FW_DIR}/${FW_FILE_GZ}
+        fi
+        if [[ -n "${DST_FNAME}" ]]; then
+            cp -f $1 ${DST_FNAME}
+            echo ${version} > ${FW_DIR}/${VER_FILE}
+            return
+        fi
+    fi
 
     source $OS_CONF
     board=$(cat $SYS_BOARD_FILE)
@@ -227,6 +260,34 @@ function do_extract() {
         echo $pid > $FW_DIR/$GUNZIP_PID_FILE
     fi
     wait $pid
+
+    # verify available partition space
+
+    fw_boot_info=$(fdisk --bytes -l -o device,start,end,size $FW_DIR/$FW_FILE_EXTR | grep "${FW_FILE_EXTR}1")
+    fw_boot_info=($fw_boot_info)
+    fw_boot_size=${fw_boot_info[3]}
+
+    fw_root_info=$(fdisk --bytes -l -o device,start,end,size $FW_DIR/$FW_FILE_EXTR | grep "${FW_FILE_EXTR}2")
+    fw_root_info=($fw_root_info)
+    fw_root_size=${fw_root_info[3]}
+
+    disk_boot_info=$(fdisk --bytes -l -o device,start,end,size $DISK_DEV | grep $BOOT_DEV)
+    disk_boot_info=($disk_boot_info)
+    disk_boot_size=${disk_boot_info[3]}
+
+    disk_root_info=$(fdisk --bytes -l -o device,start,end,size $DISK_DEV | grep $ROOT_DEV)
+    disk_root_info=($disk_root_info)
+    disk_root_size=${disk_root_info[3]}
+
+    if [[ $disk_boot_size -lt $fw_boot_size ]]; then
+        echo "not enough space on boot partition ($fw_boot_size needed, $disk_boot_size available)" 1>&2
+        exit 1
+    fi
+
+    if [[ $disk_root_size -lt $fw_root_size ]]; then
+        echo "not enough space on root partition ($fw_root_size needed, $disk_root_size available)" 1>&2
+        exit 1
+    fi
 
     # TODO verify hash
 }
