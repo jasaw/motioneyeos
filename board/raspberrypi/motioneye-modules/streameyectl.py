@@ -130,6 +130,11 @@ ROTATION_CHOICES = [
     ('270', '270&deg;')
 ]
 
+PROTO_CHOICES = [
+    ('mjpeg', 'MJPEG'),
+    ('rtsp', 'RTSP'),
+]
+
 AUTH_CHOICES = [
     ('disabled', 'Disabled'),
     ('basic', 'Basic'),
@@ -310,6 +315,7 @@ def _get_raspimjpeg_settings(camera_id):
         'hflip': False,
         'framerate': 15,
         'quality': 25,
+        'bitrate': 1000000,
         'zoomx': 0,
         'zoomy': 0,
         'zoomw': 100,
@@ -402,8 +408,14 @@ def _set_raspimjpeg_settings(camera_id, s):
 
 def _get_streameye_settings(camera_id):
     s = {
+        'seProto': 'mjpeg',
         'seAuthMode': 'disabled',
         'sePort': 8081,
+        'seRTSPPort': 554,
+        'seMJPEGWidth': 640,
+        'seMJPEGHeight': 480,
+        'seMJPEGFramerate': 5,
+        'seMJPEGBitrate': 800000
     }
     
     if os.path.exists(STREAMEYE_CONF):
@@ -415,23 +427,58 @@ def _get_streameye_settings(camera_id):
                 if not line:
                     continue
 
-                m = re.findall('PORT="?(\d+)"?', line)
+                m = re.findall('^PORT="?(\d+)"?', line)
                 if m:
                     s['sePort'] = int(m[0])
                     continue
                     
-                m = re.findall('AUTH="?(\w+)"?', line)
+                m = re.findall('^RTSP_PORT="?(\d+)"?', line)
+                if m:
+                    s['seRTSPPort'] = int(m[0])
+                    continue
+
+                m = re.findall('^AUTH="?(\w+)"?', line)
                 if m:
                     s['seAuthMode'] = m[0]
+
+                m = re.findall('^PROTO="?(\w+)"?', line)
+                if m:
+                    s['seProto'] = m[0]
+
+                m = re.findall('^MJPEG_WIDTH="?(\w+)"?', line)
+                if m:
+                    s['seMJPEGWidth'] = m[0]
+
+                m = re.findall('^MJPEG_HEIGHT="?(\w+)"?', line)
+                if m:
+                    s['seMJPEGHeight'] = m[0]
+
+                m = re.findall('^MJPEG_FRAMERATE="?(\w+)"?', line)
+                if m:
+                    s['seMJPEGFramerate'] = m[0]
+
+                m = re.findall('^MJPEG_BITRATE="?(\w+)"?', line)
+                if m:
+                    s['seMJPEGBitrate'] = m[0]
+
+    s['seMJPEGRes'] = '%sx%s' % (s.pop('seMJPEGWidth'), s.pop('seMJPEGHeight'))
 
     return s
 
 
 def _set_streameye_settings(camera_id, s):
     s = dict(s)
+    s['seMJPEGWidth'] = int(s['seMJPEGRes'].split('x')[0])
+    s['seMJPEGHeight'] = int(s.pop('seMJPEGRes').split('x')[1])
+
     s.setdefault('sePort', 8081)
+    s.setdefault('seRTSPPort', 554)
     s.setdefault('seAuthMode', 'disabled')
-    
+    s.setdefault('seMJPEGWidth', 640)
+    s.setdefault('seMJPEGHeight', 480)
+    s.setdefault('seMJPEGFramerate', 5)
+    s.setdefault('seMJPEGBitrate', 800000)
+
     main_config = config.get_main()
     username = main_config['@normal_username']
     password = main_config['@normal_password']
@@ -440,7 +487,13 @@ def _set_streameye_settings(camera_id, s):
     logging.debug('writing streameye settings to %s' % STREAMEYE_CONF)
     
     lines = [
+        'PROTO="%s"' % s['seProto'],
         'PORT="%s"' % s['sePort'],
+        'RTSP_PORT="%s"' % s['seRTSPPort'],
+        'MJPEG_WIDTH="%s"' % s['seMJPEGWidth'],
+        'MJPEG_HEIGHT="%s"' % s['seMJPEGHeight'],
+        'MJPEG_FRAMERATE="%s"' % s['seMJPEGFramerate'],
+        'MJPEG_BITRATE="%s"' % s['seMJPEGBitrate'],
         'AUTH="%s"' % s['seAuthMode'],
         'CREDENTIALS="%s:%s:%s"' % (username, password, realm)
     ]
@@ -772,6 +825,28 @@ def seQuality():
         'ticks': '1|25|50|75|100',
         'decimals': 0,
         'unit': '%',
+        'section': 'device',
+        'advanced': True,
+        'camera': True,
+        'required': True,
+        'get': _get_raspimjpeg_settings,
+        'set': _set_raspimjpeg_settings,
+        'get_set_dict': True
+    }
+
+
+@additional_config
+def seBitrate():
+    if not _get_streameye_enabled():
+        return None
+
+    return {
+        'label': 'Bitrate',
+        'description': 'sets the RTSP stream bitrate (higher values produce a better stream quality but require more storage space and bandwidth)',
+        'type': 'number',
+        'min': 0,
+        'max': 100000000,
+        'unit': 'bps',
         'section': 'device',
         'advanced': True,
         'camera': True,
@@ -1131,6 +1206,48 @@ def seImxfx():
 
 
 @additional_config
+def seProto():
+    if not _get_streameye_enabled():
+        return None
+
+    return {
+        'label': 'Streaming Protocol',
+        'description': 'the desired streaming protocol (keep in mind that RTSP is experimental)',
+        'type': 'choices',
+        'choices': PROTO_CHOICES,
+        'section': 'streaming',
+        'advanced': True,
+        'camera': True,
+        'required': True,
+        'get': _get_streameye_settings,
+        'set': _set_streameye_settings,
+        'get_set_dict': True
+    }
+
+
+@additional_config
+def seRTSPPort():
+    if not _get_streameye_enabled():
+        return None
+
+    return {
+        'label': 'Streaming RTSP Port',
+        'description': 'sets the TCP port on which the webcam streaming server listens',
+        'type': 'number',
+        'min': 0,
+        'max': 65535,
+        'section': 'streaming',
+        'advanced': True,
+        'camera': True,
+        'required': True,
+        'depends': ['seProto==rtsp'],
+        'get': _get_streameye_settings,
+        'set': _set_streameye_settings,
+        'get_set_dict': True
+    }
+
+
+@additional_config
 def sePort():
     if not _get_streameye_enabled():
         return None
@@ -1139,12 +1256,80 @@ def sePort():
         'label': 'Streaming Port',
         'description': 'sets the TCP port on which the webcam streaming server listens',
         'type': 'number',
-        'min': 1024,
+        'min': 0,
         'max': 65535,
         'section': 'streaming',
         'advanced': True,
         'camera': True,
         'required': True,
+        'get': _get_streameye_settings,
+        'set': _set_streameye_settings,
+        'get_set_dict': True
+    }
+
+
+@additional_config
+def seMJPEGRes():
+    if not _get_streameye_enabled():
+        return None
+
+    return {
+        'label': 'MJPEG Resolution',
+        'description': 'the MJPEG resolution fed to the frontend and used for motion detection on remote machines when streaming RTSP',
+        'type': 'choices',
+        'choices': RESOLUTION_CHOICES,
+        'section': 'streaming',
+        'advanced': True,
+        'camera': True,
+        'required': True,
+        'depends': ['seProto==rtsp'],
+        'get': _get_streameye_settings,
+        'set': _set_streameye_settings,
+        'get_set_dict': True
+    }
+
+
+@additional_config
+def seMJPEGFramerate():
+    if not _get_streameye_enabled():
+        return None
+
+    return {
+        'label': 'MJPEG Frame Rate',
+        'description': 'the MJPEG Frame Rate fed to the frontend and used for motion detection on remote machines when streaming RTSP; for motion detection, 5 works good',
+        'type': 'range',
+        'min': 2,
+        'max': 30,
+        'snap': 0,
+        'ticks': "2|5|10|15|20|25|30",
+        'decimals': 0,
+        'section': 'streaming',
+        'advanced': True,
+        'camera': True,
+        'required': True,
+        'depends': ['seProto==rtsp'],
+        'get': _get_streameye_settings,
+        'set': _set_streameye_settings,
+        'get_set_dict': True
+    }
+
+
+@additional_config
+def seMJPEGBitrate():
+    if not _get_streameye_enabled():
+        return None
+
+    return {
+        'label': 'MJPEG Bitrate',
+        'description': 'the MJPEG Bitrate fed to the frontend and used for motion detection on remote machines when streaming RTSP; for motion detection, 800000 works good',
+        'type': 'number',
+        'min': 0,
+        'max': 25000000,
+        'section': 'streaming',
+        'advanced': True,
+        'camera': True,
+        'required': True,
+        'depends': ['seProto==rtsp'],
         'get': _get_streameye_settings,
         'set': _set_streameye_settings,
         'get_set_dict': True
