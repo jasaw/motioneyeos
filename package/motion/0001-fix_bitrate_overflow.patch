@@ -1,0 +1,12 @@
+diff -rupEbwBN -x.git motion-release-4.1.1.org/ffmpeg.c motion-release-4.1.1/ffmpeg.c
+--- motion-release-4.1.1.org/ffmpeg.c	2017-12-10 12:05:49.000000000 +1100
++++ motion-release-4.1.1/ffmpeg.c	2019-10-18 12:07:25.268272147 +1100
+@@ -521,7 +521,7 @@ static int ffmpeg_set_quality(struct ffm
+         if ((strcmp(ffmpeg->codec->name, "h264_omx") == 0) || (strcmp(ffmpeg->codec->name, "mpeg4_omx") == 0)) {
+             // H264 OMX encoder quality can only be controlled via bit_rate
+             // bit_rate = ffmpeg->width * ffmpeg->height * ffmpeg->fps * quality_factor
+-            ffmpeg->vbr = (ffmpeg->width * ffmpeg->height * ffmpeg->fps * ffmpeg->vbr) >> 7;
++            ffmpeg->vbr = (int)(((int64_t)ffmpeg->width * ffmpeg->height * ffmpeg->fps * ffmpeg->vbr) >> 7);
+             // Clip bit rate to min
+             if (ffmpeg->vbr < 4000) // magic number
+                 ffmpeg->vbr = 4000;
